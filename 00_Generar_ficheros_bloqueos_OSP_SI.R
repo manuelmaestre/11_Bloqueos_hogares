@@ -40,3 +40,126 @@ cols.tabla.comillas <- function(tabla.datos){
 cols.tabla <- function(tabla.datos){
   cat(paste("c(", paste(colnames(tabla.datos), sep="", collapse = ", ")), ")", sep="",collapse="")
 }
+
+## Path and static variables definition
+
+ocupacion.sistemas.file <- '../../000_DWH_txt_files/03_Extracciones_sistemas/Consulta_Ocupacion.txt'
+inventario.sistemas.hogares.file <- '../../000_DWH_txt_files/03_Extracciones_sistemas/Consulta_Cobertura.txt'
+customer.file <- '../../000_DWH_txt_files//03_Extracciones_sistemas/ClientesRedPropia_IUA.csv'
+hogares.OSP.file <- 'indata/00_Direcciones_mutualizadas_MMB.txt'
+
+#### Get CTOs and appartments block/unblock condition
+
+shell('R_exportar_bloqueos_NAE.MAM')
+CTOs.block <- as.data.table(read_excel('../../../../compartidos/coberturaFTTH/02_total_CTO_bloqueadas.xlsx',sheet = 1, trim_ws = T))
+
+
+#### Load CTOs condition from SI report
+
+CTO.report <- as.data.table(read.csv(ocupacion.sistemas.file,
+                                     header = F,
+                                     sep = ';',
+                                     fileEncoding = 'UTF-8',
+                                     dec = ',',
+                                     strip.white = T))
+colnames(CTO.report) <- c("CTO","ACTIVOS","LIBRES","RESERVADOS","INACTIVOS", "AVERIADO", "TOTAL","OCUPACION","OLT","ESTADO_CTO_SIS","UUII","TASA_DESPLIEGUE","del1","del2")
+CTO.report[, c('del1', 'del2'):=NULL]
+
+registros.iniciales.CTO.report <- nrow(CTO.report)
+
+#### Update condition and reason from block CTOs
+
+CTO.report$ESTADO_CTO_SIS <- 'FREE'
+CTO.report[CTO %in% CTOs.block$CTO_ID, ESTADO_CTO_SIS := 'INACTIVE']
+
+
+#### Load blacklist
+
+blacklist <- as.data.table(read_excel('../../../../compartidos/coberturaFTTH/01_DireccionesListasNegras.xlsx',sheet = 1, trim_ws = T))
+
+#### Load apartments SI
+
+inventario.hogares <- as.data.table(read.csv(inventario.sistemas.hogares.file, header = F, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+colnames(inventario.hogares) <- c("GESCAL_37","ID_DOMICILIO TO","Codigo Postal",
+                                  "Provincia","Poblacion","Tipo via","Nombre via","ID_TECNICO_DE_LA_VIA",
+                                  "Numero","BIS","Bloque_finca","Portal_puerta","Letra","Escalera","Planta","Mano1","Mano2",
+                                  "Obsservaciones/comentario","Flagdummy","Cod INE Via","Codigo Censal","Codigo Pai","OLT",
+                                  "Codigo CTO","TIPO_CTO","DIRECCION_CTO","TIPO_INSTALACION",
+                                  "Tipo caja de derivacion","UUII","N viviendas","Fecha_alta","Codigo CD","UBICACION_CD", "del1")
+
+### Replace '?' in city name
+
+inventario.hogares$Poblacion <- str_replace_all(inventario.hogares$Poblacion, '\\?', 'Ñ')
+inventario.hogares$del1 <- NULL
+
+#### Init block tag
+
+inventario.hogares$Blacklist <- 'no'
+
+
+#### Tag block x CTO
+
+inventario.hogares[`Codigo CTO` %in% CTOs.block$CTO_ID, Blacklist := 'si']
+inventario.hogares <- merge(inventario.hogares, CTOs.block[,c('CTO_ID', "Motivo bloqueo")], all.x = T, by.x = 'Codigo CTO', by.y = 'CTO_ID')
+
+
+#### Tag block x apartment blacklist
+
+inventario.hogares[`ID_DOMICILIO TO` %in% blacklist$ID_DOMICILIO, Blacklist := 'si']
+inventario.hogares[`ID_DOMICILIO TO` %in% blacklist$ID_DOMICILIO, "Motivo bloqueo" := 'Infraestructura']
+
+
+#### Load customers
+
+customers.FTTH <- as.data.table(read.csv(customer.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+## Eliminamos las bajas
+customers.FTTH <- customers.FTTH[FECHABAJA == '', ]
+
+#### Untag block if customer
+
+inventario.hogares[`ID_DOMICILIO TO` %in% customers.FTTH$ID_DOMICILIO, Blacklist := 'no']
+inventario.hogares[`ID_DOMICILIO TO` %in% customers.FTTH$ID_DOMICILIO, "Motivo bloqueo" := '']
+inventario.hogares[Blacklist == 'si' & ("Motivo bloqueo" == '' | is.na(`Motivo bloqueo`)), `Motivo bloqueo`:= 'Infraestructura']
+inventario.hogares[, .N, by = c('Blacklist', "Motivo bloqueo")]
+
+#### Load apartments OSP
+
+OSP.hogares <- as.data.table(read.csv(hogares.OSP.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+OSP.hogares$cruce <- NULL
+OSP.hogares$G37 <- NULL
+OSP.hogares <- OSP.hogares[, 1:30]
+
+
+hogares.OSP.bloqueados <- merge(OSP.hogares, inventario.hogares[Blacklist == 'si', c("ID_DOMICILIO TO", "Motivo bloqueo")], by.x = 'ID_DOMICILIO.TO', by.y = "ID_DOMICILIO TO")
+
+
+#### EXPORTS
+
+#### SI
+
+inventario.hogares[is.na(`Motivo bloqueo`), `Motivo bloqueo` := '']
+
+write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F)
+write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F)
+
+#### OSP
+
+NNNNNNNN <- str_pad(nrow(hogares.OSP.bloqueados),width = 8,side = 'left',pad = '0')
+VV <- '01'
+AAMMDD <- gsub('-', '', Sys.Date())
+AAMMDD <- substr(AAMMDD, 3, nchar(AAMMDD))
+
+bloqueos$ult_col <- ''
+
+out.bloqueos.name <- str_c('outdata/OSP/BO_904_030_', AAMMDD, "_01_", NNNNNNNN, '.csv', sep = '', collapse = T)
+
+write.table(hogares.OSP.bloqueados, file = out.bloqueos.name, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F)
+
+
+
+
+#### UNEs
+
+
+
+
