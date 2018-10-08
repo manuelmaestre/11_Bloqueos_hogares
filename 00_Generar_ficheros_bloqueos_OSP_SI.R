@@ -139,8 +139,8 @@ hogares.OSP.bloqueados <- merge(OSP.hogares, inventario.hogares[Blacklist == 'si
 
 inventario.hogares[is.na(`Motivo bloqueo`), `Motivo bloqueo` := '']
 
-write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F)
-write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F)
+write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "")
+write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "")
 
 #### OSP
 
@@ -153,7 +153,7 @@ bloqueos$ult_col <- ''
 
 out.bloqueos.name <- str_c('outdata/OSP/BO_904_030_', AAMMDD, "_01_", NNNNNNNN, '.csv', sep = '', collapse = T)
 
-write.table(hogares.OSP.bloqueados, file = out.bloqueos.name, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F)
+write.table(hogares.OSP.bloqueados, file = out.bloqueos.name, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F, na = "")
 
 
 
