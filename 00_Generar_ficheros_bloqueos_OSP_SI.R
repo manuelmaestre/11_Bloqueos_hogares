@@ -149,14 +149,15 @@ VV <- '01'
 AAMMDD <- gsub('-', '', Sys.Date())
 AAMMDD <- substr(AAMMDD, 3, nchar(AAMMDD))
 
-bloqueos$ult_col <- ''
+hogares.OSP.bloqueados$ult_col <- ''
 
 out.bloqueos.name <- str_c('outdata/OSP/BO_904_030_', AAMMDD, "_01_", NNNNNNNN, '.csv', sep = '', collapse = T)
 
 write.table(hogares.OSP.bloqueados, file = out.bloqueos.name, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F, na = "")
 
+#### Reports
 
-
+hogares.OSP.bloqueados[, .N, by = 'Motivo bloqueo']
 
 #### UNEs
 
