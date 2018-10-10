@@ -61,7 +61,8 @@ CTO.report <- as.data.table(read.csv(ocupacion.sistemas.file,
                                      sep = ';',
                                      fileEncoding = 'UTF-8',
                                      dec = ',',
-                                     strip.white = T))
+                                     strip.white = T,
+                                     colClasses = 'character'))
 colnames(CTO.report) <- c("CTO","ACTIVOS","LIBRES","RESERVADOS","INACTIVOS", "AVERIADO", "TOTAL","OCUPACION","OLT","ESTADO_CTO_SIS","UUII","TASA_DESPLIEGUE","del1","del2")
 CTO.report[, c('del1', 'del2'):=NULL]
 
@@ -79,7 +80,7 @@ blacklist <- as.data.table(read_excel('../../../../compartidos/coberturaFTTH/01_
 
 #### Load apartments SI
 
-inventario.hogares <- as.data.table(read.csv(inventario.sistemas.hogares.file, header = F, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+inventario.hogares <- as.data.table(read.csv(inventario.sistemas.hogares.file, header = F, sep = ';', fileEncoding = 'UTF-8', strip.white = T, colClasses = 'character'))
 colnames(inventario.hogares) <- c("GESCAL_37","ID_DOMICILIO TO","Codigo Postal",
                                   "Provincia","Poblacion","Tipo via","Nombre via","ID_TECNICO_DE_LA_VIA",
                                   "Numero","BIS","Bloque_finca","Portal_puerta","Letra","Escalera","Planta","Mano1","Mano2",
@@ -111,7 +112,7 @@ inventario.hogares[`ID_DOMICILIO TO` %in% blacklist$ID_DOMICILIO, "Motivo bloque
 
 #### Load customers
 
-customers.FTTH <- as.data.table(read.csv(customer.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+customers.FTTH <- as.data.table(read.csv(customer.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T, colClasses = 'character'))
 ## Eliminamos las bajas
 customers.FTTH <- customers.FTTH[FECHABAJA == '', ]
 
@@ -124,7 +125,8 @@ inventario.hogares[, .N, by = c('Blacklist', "Motivo bloqueo")]
 
 #### Load apartments OSP
 
-OSP.hogares <- as.data.table(read.csv(hogares.OSP.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T))
+shell('exportar_domicilios_para_bloqueos_R.MAM')
+OSP.hogares <- as.data.table(read.csv(hogares.OSP.file, header = T, sep = ';', fileEncoding = 'UTF-8', strip.white = T, colClasses = 'character'))
 OSP.hogares$cruce <- NULL
 OSP.hogares$G37 <- NULL
 OSP.hogares <- OSP.hogares[, 1:30]
@@ -139,8 +141,8 @@ hogares.OSP.bloqueados <- merge(OSP.hogares, inventario.hogares[Blacklist == 'si
 
 inventario.hogares[is.na(`Motivo bloqueo`), `Motivo bloqueo` := '']
 
-write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "")
-write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "")
+write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
+write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
 
 #### OSP
 
