@@ -4,10 +4,12 @@
 ## Library load
 
 library(readxl)
+library(xlsx)
 #library(dataframes2xls)
 library(stringr)
 library(data.table)
 library(zip)
+library(lubridate)
 
 ## Environment cleanning
 
@@ -20,14 +22,14 @@ rm(list = ls())
 copy.table <- function(obj, size = 4096) {
   clip <- paste('clipboard-', size, sep = '')
   f <- file(description = clip, open = 'w')
-  write.table(obj, f, row.names = FALSE, sep = '\t')
+  write.table(obj, f, row.names = FALSE, sep = '\t', dec = ',')
   close(f)  
 }
 
 # Paste data into R
 paste.table <- function() {
   f <- file(description = 'clipboard', open = 'r')
-  df <- read.table(f, sep = '\t', header = TRUE)
+  df <- read.table(f, sep = '\t', header = TRUE, dec = ',')
   close(f)
   return(df)
 }
@@ -47,6 +49,9 @@ ocupacion.sistemas.file <- '../../000_DWH_txt_files/03_Extracciones_sistemas/Con
 inventario.sistemas.hogares.file <- '../../000_DWH_txt_files/03_Extracciones_sistemas/Consulta_Cobertura.txt'
 customer.file <- '../../000_DWH_txt_files//03_Extracciones_sistemas/ClientesRedPropia_IUA.csv'
 hogares.OSP.file <- 'indata/00_Direcciones_mutualizadas_MMB.txt'
+reportfile.blockCTO <- './outdata/REPORTS/histCTOblock.csv'
+reportfile.totalhogaresbloqueados <- './outdata/REPORTS/hogaresbloqueados.csv'
+
 
 #### Get CTOs and appartments block/unblock condition
 
@@ -137,19 +142,20 @@ hogares.OSP.bloqueados <- merge(OSP.hogares, inventario.hogares[Blacklist == 'si
 
 #### EXPORTS
 
+AAMMDD <- gsub('-', '', Sys.Date())
+AAMMDD <- substr(AAMMDD, 3, nchar(AAMMDD))
+
 #### SI
 
 inventario.hogares[is.na(`Motivo bloqueo`), `Motivo bloqueo` := '']
 
-write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = 'outdata/SI/920_Extraccion_total_CTO_marca_bloqueo.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
-write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = 'outdata/SI/921_Extraccion_total_direcciones_marca_blacklist.txt', sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
+write.table(CTO.report[,c("OLT", "CTO", "ESTADO_CTO_SIS")], file = str_c('outdata/SI/',  AAMMDD, '_Extraccion_total_CTO_marca_bloqueo.txt', sep = '', collapse = T), sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
+write.table(inventario.hogares[,c("ID_DOMICILIO TO", "GESCAL_37", "Blacklist", "Motivo bloqueo")], file = str_c('outdata/SI/',  AAMMDD, '_Extraccion_total_direcciones_marca_blacklist.txt', sep = '', collapse = T), sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, na = "", row.names = F)
 
 #### OSP
 
 NNNNNNNN <- str_pad(nrow(hogares.OSP.bloqueados),width = 8,side = 'left',pad = '0')
 VV <- '01'
-AAMMDD <- gsub('-', '', Sys.Date())
-AAMMDD <- substr(AAMMDD, 3, nchar(AAMMDD))
 
 hogares.OSP.bloqueados$ult_col <- ''
 
@@ -161,8 +167,40 @@ write.table(hogares.OSP.bloqueados, file = out.bloqueos.name, sep = ";", col.nam
 
 hogares.OSP.bloqueados[, .N, by = 'Motivo bloqueo']
 
+
+#### Histogramas tiempos bloqueo
+
+## tiempos de bloqueo x CTO
+
+total.hogares.bloqueados <- inventario.hogares[Blacklist == 'si', ]
+total.hogares.bloqueados <- merge(total.hogares.bloqueados, CTOs.block[, c("CTO_ID", "Fecha envio bloqueo SI")], all.x = T, by.x = 'Codigo CTO', by.y = 'CTO_ID')
+setnames(total.hogares.bloqueados, "Fecha envio bloqueo SI", "Fecha.bloqueo.CTO")
+total.hogares.bloqueados$nivel.bloqueo <- "Blacklist"
+total.hogares.bloqueados[!is.na(Fecha.bloqueo.CTO) , nivel.bloqueo := 'bloqueoCTO']
+total.hogares.bloqueados[nivel.bloqueo == 'bloqueoCTO', semanas.bloqueado := as.integer((difftime(Sys.Date() , (Fecha.bloqueo.CTO), units = "weeks")))]
+
+total.hogares.bloqueados$Mutualizado <- 'no'
+total.hogares.bloqueados[`ID_DOMICILIO TO` %in% hogares.OSP.bloqueados$ID_DOMICILIO.TO, Mutualizado := 'si']
+
+write.table(total.hogares.bloqueados[nivel.bloqueo == 'bloqueoCTO' & `Motivo bloqueo` == "Saturacion", .N, by = c("Provincia", "Poblacion", "Codigo CTO", "semanas.bloqueado", "Mutualizado")],
+            file = reportfile.blockCTO, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F, na = "")
+
+hist(total.hogares.bloqueados[nivel.bloqueo == 'bloqueoCTO' & `Motivo bloqueo` == "Saturacion", ]$semanas.bloqueado)
+
+## tiempos de bloqueo x Blacklist
+
+total.hogares.bloqueados[, .N, by ="nivel.bloqueo"]
+total.hogares.bloqueados <- merge(total.hogares.bloqueados, blacklist[, c("ID_DOMICILIO", "fecha_bloqueo")], all.x = T, by.x = "ID_DOMICILIO TO", by.y = "ID_DOMICILIO")
+setnames(total.hogares.bloqueados, "fecha_bloqueo", "Fecha.bloqueo.Blacklist")
+total.hogares.bloqueados[nivel.bloqueo == 'Blacklist', semanas.bloqueado := as.integer((difftime(Sys.Date() , Fecha.bloqueo.Blacklist, units = "weeks")))]
+
+write.table(total.hogares.bloqueados,
+            file = reportfile.totalhogaresbloqueados, sep = ";", col.names = T, fileEncoding = 'UTF-8', quote = F, row.names = F, na = "")
+
+
+
 #### UNEs
 
-
-
+length(unique(CTOs.block$CTO_ID))
+CTOs.block[duplicated(CTOs.block$CTO_ID), ]
 
